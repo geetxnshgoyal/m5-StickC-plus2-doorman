@@ -1,0 +1,40 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build every board target
+        run: pio run
+
+      - name: Collect flashable images
+        run: |
+          mkdir -p dist
+          cp .pio/build/stickc-plus2/firmware.factory.bin dist/doorman-stickc-plus2.factory.bin
+          cp .pio/build/stickc-plus/firmware.factory.bin  dist/doorman-stickc-plus.factory.bin
+          ls -l dist
+
+      # The .factory.bin images are merged from offset 0x0, so they flash to
+      # offset 0 in one shot. docs/manifest-*.json point at these asset names
+      # through the /releases/latest/download/ alias, so the web installer picks
+      # up each new release without the manifests needing to change.
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          generate_release_notes: true

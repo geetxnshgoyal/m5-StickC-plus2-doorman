@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doorman | Get Alexa and smart devices onto captive portal Wi-Fi</title>
+<meta name="description" content="Connect Alexa, Echo, smart bulbs and printers to hotel, hostel or campus Wi-Fi that needs a captive portal login or WPA2-Enterprise. Flash an M5StickC from your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128682;</text></svg>">
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<style>
+  /* Doorman's livery: navy coat, brass buttons.
+     Deep metallic navy, read off a gloss panel: #19427D is where the light
+     lands, and it falls away to near-black in the shadow. Brass sits on top,
+     the way a gold badge does. */
+  :root {
+    --lit:    #19427D;   /* the brand, where the light hits */
+    --navy:   #102A52;   /* body colour in even light */
+    --ink:    #070F1E;   /* the shadow it falls into */
+    --felt:   #0E2244;   /* raised surface */
+    --line:   #1C3C6E;
+    --brass:  #C9A227;
+    --brass2: #E8CC72;   /* highlight along the bevel */
+    --brassd: #7A5F16;
+    --ivory:  #F1EDE2;
+    --sage:   #8FA6C6;   /* blue-grey, reads as muted against navy */
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --lit:    #19427D;
+      --navy:   #102A52;
+      --ink:    #EDF1F7;
+      --felt:   #F7F9FC;
+      --line:   #C6D4E8;
+      --brass:  #8A6B12;
+      --brass2: #A9871F;
+      --brassd: #C4B47E;
+      --ivory:  #0A1729;
+      --sage:   #4A5F7D;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation: none !important; transition: none !important; }
+  }
+  body {
+    margin: 0;
+    background: var(--ink);
+    /* the gloss falloff across a hood */
+    background-image: radial-gradient(125% 62% at 50% 0%,
+                      var(--lit) 0%, var(--navy) 34%, var(--ink) 72%);
+    color: var(--ivory);
+    font: 17px/1.68 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  @media (prefers-color-scheme: light) {
+    body { background-image: radial-gradient(120% 60% at 50% 0%, #FFFFFF 0%, var(--ink) 68%); }
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---- the plaque: the one place the design spends its boldness ---- */
+  header { padding: 84px 0 18px; text-align: center; }
+  .plaque {
+    display: inline-block; padding: 26px 44px; border-radius: 3px;
+    border: 1px solid var(--brassd);
+    background:
+      radial-gradient(circle at 10px 10px, var(--brassd) 0 1.6px, transparent 2.2px),
+      radial-gradient(circle at calc(100% - 10px) 10px, var(--brassd) 0 1.6px, transparent 2.2px),
+      radial-gradient(circle at 10px calc(100% - 10px), var(--brassd) 0 1.6px, transparent 2.2px),
+      radial-gradient(circle at calc(100% - 10px) calc(100% - 10px), var(--brassd) 0 1.6px, transparent 2.2px),
+      linear-gradient(160deg, rgba(201,162,39,.16), rgba(201,162,39,.03) 42%, rgba(201,162,39,.13));
+    box-shadow: inset 0 1px 0 rgba(232,204,114,.22), 0 1px 0 rgba(0,0,0,.25);
+  }
+  .plaque h1 {
+    margin: 0; font-size: 34px; font-weight: 600; letter-spacing: .30em;
+    text-indent: .30em; text-transform: uppercase; line-height: 1;
+    background: linear-gradient(178deg, var(--brass2), var(--brass) 46%, var(--brassd));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .plaque .sub {
+    margin: 12px 0 0; font-size: 10.5px; letter-spacing: .34em; text-indent: .34em;
+    text-transform: uppercase; color: var(--sage); font-weight: 500;
+  }
+
+  .tag {
+    text-align: center; font-size: 22px; line-height: 1.4; font-weight: 600;
+    margin: 34px auto 12px; max-width: 20ch; letter-spacing: -.01em;
+  }
+  .lede {
+    text-align: center; color: var(--sage); margin: 0 auto 8px; max-width: 54ch; font-size: 16.5px;
+  }
+
+  h2 {
+    font-size: 12px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--brass); font-weight: 600; margin: 64px 0 16px;
+    padding-bottom: 9px; border-bottom: 1px solid var(--line);
+  }
+  h3 { font-size: 17px; margin: 26px 0 6px; }
+  p { margin: 0 0 16px; }
+  a { color: var(--brass); text-underline-offset: 3px; }
+  :focus-visible { outline: 2px solid var(--brass2); outline-offset: 3px; border-radius: 2px; }
+
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; }
+  code {
+    background: var(--felt); border: 1px solid var(--line);
+    padding: 1px 6px; border-radius: 3px; color: var(--ivory);
+  }
+  pre {
+    background: var(--felt); border: 1px solid var(--line); border-left: 2px solid var(--brass);
+    border-radius: 3px; padding: 14px 16px; overflow-x: auto;
+  }
+  pre code { background: none; border: 0; padding: 0; }
+
+  .card {
+    background: var(--felt); border: 1px solid var(--line);
+    border-left: 2px solid var(--brass); border-radius: 3px; padding: 20px 24px;
+  }
+
+  .install { text-align: center; margin: 30px 0 8px; }
+  .btn {
+    font: inherit; font-size: 15px; font-weight: 650; cursor: pointer;
+    padding: 13px 28px; border-radius: 3px; letter-spacing: .02em;
+    color: #1A1405; border: 1px solid var(--brassd);
+    background: linear-gradient(178deg, var(--brass2), var(--brass) 55%, #B08C1C);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .btn:hover { filter: brightness(1.07); }
+  .btn.alt {
+    background: none; color: var(--brass); border: 1px solid var(--line);
+    box-shadow: none; font-weight: 600;
+  }
+  .btn.alt:hover { border-color: var(--brass); }
+  .note { font-size: 13.5px; color: var(--sage); margin-top: 14px; }
+
+  .diagram {
+    background: var(--felt); border: 1px solid var(--line); border-radius: 3px;
+    padding: 20px; overflow-x: auto; font-family: ui-monospace, monospace;
+    font-size: 12.5px; line-height: 1.55; white-space: pre; color: var(--sage);
+  }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 9px; }
+  li::marker { color: var(--brass); }
+
+  .warn { border-left: 2px solid var(--brass); padding: 2px 0 2px 18px; color: var(--sage); font-size: 15.5px; }
+
+  footer {
+    margin: 76px 0 48px; padding-top: 22px; border-top: 1px solid var(--line);
+    color: var(--sage); font-size: 13.5px; text-align: center; letter-spacing: .04em;
+  }
+  @media (max-width: 520px) {
+    .plaque { padding: 22px 26px; }
+    .plaque h1 { font-size: 23px; letter-spacing: .22em; text-indent: .22em; }
+    .tag { font-size: 19px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="plaque">
+    <h1>Doorman</h1>
+    <p class="sub">Est. on an M5StickC</p>
+  </div>
+</header>
+
+<p class="tag">A Wi-Fi doorman for devices that can't sign themselves in.</p>
+<p class="lede">
+  Connect Alexa, Echo, smart bulbs, printers and consoles to hotel, hostel or
+  campus Wi-Fi that demands a captive portal login or WPA2-Enterprise.
+</p>
+
+<div class="card" style="margin-top:34px">
+  <p style="margin:0"><strong>Your smart bulb doesn't have a browser.</strong>
+  It will never get past the login page your Wi-Fi shows you. There's no setting
+  you can change, because the device physically cannot complete that login.</p>
+</div>
+
+<h2>Install it from this page</h2>
+
+<p>Plug an M5StickC into this computer with a USB-C cable, then click Install.
+Nothing to download and no toolchain to set up.</p>
+
+<div class="install">
+  <esp-web-install-button manifest="manifest-plus2.json">
+    <button class="btn" slot="activate">Install on M5StickC Plus2</button>
+    <span slot="unsupported"></span>
+    <span slot="not-allowed"></span>
+  </esp-web-install-button>
+  <div style="margin-top:12px">
+    <esp-web-install-button manifest="manifest-plus.json">
+      <button class="btn alt" slot="activate">Install on M5StickC Plus</button>
+      <span slot="unsupported"></span>
+      <span slot="not-allowed"></span>
+    </esp-web-install-button>
+  </div>
+  <p class="note">
+    Needs Chrome or Edge on a desktop, since Safari and Firefox don't support
+    Web Serial. Other browsers can
+    <a href="https://github.com/geetxnshgoyal/m5-StickC-plus2-doorman/blob/main/INSTALL.md">install manually</a>.
+  </p>
+</div>
+
+<h2>Then set it up</h2>
+
+<ul>
+  <li>Join the <code>Doorman</code> Wi-Fi network. Default password is <code>changeme123</code>.</li>
+  <li>Open <a href="http://192.168.4.1">192.168.4.1</a> and enter your Wi-Fi details. Change that default password while you're there.</li>
+  <li>Save. It reboots and connects.</li>
+  <li>If your network has a captive portal, open any page and log in once.</li>
+  <li>Set your smart devices up against the <code>Doorman</code> network.</li>
+</ul>
+
+<h2>How it works</h2>
+
+<p>Doorman joins the awkward network as a normal client, then re-broadcasts it
+as a plain WPA2-PSK network with NAT. Your devices join that one instead.</p>
+
+<div class="diagram">   Wi-Fi with a captive portal / WPA2-Enterprise
+                    |
+             [  Doorman  ]
+                    |  NAT, so everything behind here
+                    |  shares ONE upstream MAC
+                    |
+        private WPA2-PSK network, no portal
+                    |
+        +-----------+-----------+
+        |           |           |
+      bulb       speaker     printer</div>
+
+<p>Because everything leaves through one MAC address, one login covers every
+device behind it. Sign in once from your phone and your bulb, speaker and
+printer come online with you.</p>
+
+<h2>What it isn't</h2>
+
+<p>Doorman is a NAT router. It's the same job your home router does, and the
+same job your phone does when you switch on a personal hotspot.</p>
+
+<p>It doesn't crack or evade authentication, doesn't defeat the portal (a person
+logs in through it, normally), doesn't spoof MAC addresses, and doesn't disguise
+traffic. Your network sees one completely ordinary client. The only thing that
+changes is how many of your devices fit behind a single login.</p>
+
+<h2>Before you deploy it</h2>
+
+<p class="warn">
+Read your network's acceptable use policy. Some cap devices per account or
+forbid running an access point, and breaking that usually costs you the account.
+Don't put this on an employer's or university's network: an unregistered access
+point there is treated as a security incident. Ask whoever runs it instead, since
+most have a process for registering devices.
+</p>
+
+<h2>Honest limits</h2>
+
+<ul>
+  <li>Throughput lands around 3 to 10 Mbps. Fine for bulbs and speakers, not for your laptop.</li>
+  <li>One radio, shared. When the upstream roams you to another access point, everything behind Doorman drops for a few seconds. That's hardware, not a bug.</li>
+  <li>2.4 GHz only. The ESP32 has no 5 GHz radio.</li>
+  <li>Keep it on USB power. The internal battery is 200 mAh.</li>
+</ul>
+
+<footer>
+  <a href="https://github.com/geetxnshgoyal/m5-StickC-plus2-doorman">Source on GitHub</a>
+  &nbsp;&middot;&nbsp; MIT licensed
+</footer>
+
+</div>
+</body>
+</html>
