@@ -64,9 +64,20 @@ void net::connectUpstream() {
     if (g_cfg.upMode == UP_TTLS) {
       esp_eap_client_set_ttls_phase2_method(ESP_EAP_TTLS_PHASE2_MSCHAPV2);
     }
-    // No CA bundle is shipped, so cert validity (which depends on a clock we
-    // don't have yet at association time) must not gate the handshake.
-    esp_eap_client_set_disable_time_check(true);
+    // Without a CA the supplicant trusts whatever answers, so any access point
+    // broadcasting this SSID can collect an MSCHAPv2 exchange and grind it
+    // offline. Validate the chain whenever the user has given us a CA.
+    if (g_cfg.eapCa.length()) {
+      esp_eap_client_set_ca_cert((const unsigned char *)g_cfg.eapCa.c_str(),
+                                 g_cfg.eapCa.length() + 1);
+      // Chain is checked, but notBefore/notAfter cannot be: there's no clock
+      // yet at association time, and NTP needs the association to succeed.
+      esp_eap_client_set_disable_time_check(true);
+    } else {
+      Serial.println("[eap] WARNING: no CA certificate set. Credentials will be "
+                     "offered to any AP claiming this SSID.");
+      esp_eap_client_set_disable_time_check(true);
+    }
     esp_wifi_sta_enterprise_enable();
     WiFi.begin(g_cfg.upSsid.c_str());
   } else if (g_cfg.upMode == UP_PSK) {

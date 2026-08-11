@@ -22,6 +22,12 @@ struct Settings {
   String apSsid = "Doorman";
   String apPass = "changeme123";
 
+  // Config page login. Blank means "reuse apPass", so there's nothing extra to
+  // set up. It is a separate credential because the whole point of this device
+  // is putting devices you don't trust onto that same subnet: a compromised
+  // bulb should not be able to read your passwords off the config page.
+  String adminPass;
+
   // The hostel network.
   String upSsid;
   uint8_t upMode = UP_PSK;
@@ -29,6 +35,10 @@ struct Settings {
   String eapIdent;   // outer identity; usually the same as eapUser
   String eapUser;
   String eapPass;
+  // PEM of the RADIUS server's CA. Without it the supplicant will hand
+  // MSCHAPv2 credentials to any access point claiming the SSID, which is the
+  // standard evil-twin harvest. Blank is allowed but warned about loudly.
+  String eapCa;
 
   // The second login. Defaults to monitor-only on purpose: many portals put a
   // terms-acceptance checkbox next to the credentials, and agreeing to terms is
@@ -36,6 +46,11 @@ struct Settings {
   uint8_t portalType = PORTAL_NONE;
   String portalUser;
   String portalPass;
+
+  // When a portal offers CHAP, failure must not silently retry in cleartext:
+  // a gateway that always rejects CHAP would harvest the password. Opt in only
+  // if you know your portal advertises CHAP but genuinely accepts PAP.
+  bool allowPapFallback = false;
 
   // PORTAL_GENERIC only. Blank host in portalUrl means "the default gateway".
   // {user}, {pass} and {ts} are substituted into the body.

@@ -14,6 +14,9 @@ static String getStr(const char *key, const String &fallback) {
 static uint8_t getU8(const char *key, uint8_t fallback) {
   return prefs.isKey(key) ? prefs.getUChar(key, fallback) : fallback;
 }
+static bool getBool(const char *key, bool fallback) {
+  return prefs.isKey(key) ? prefs.getBool(key, fallback) : fallback;
+}
 
 void settings::load() {
   // Read-write rather than read-only so a first boot creates the namespace
@@ -21,15 +24,18 @@ void settings::load() {
   prefs.begin(NS, false);
   g_cfg.apSsid   = getStr("apSsid", g_cfg.apSsid);
   g_cfg.apPass   = getStr("apPass", g_cfg.apPass);
+  g_cfg.adminPass = getStr("adminPass", "");
   g_cfg.upSsid   = getStr("upSsid", "");
   g_cfg.upMode   = getU8("upMode", UP_PSK);
   g_cfg.upPass   = getStr("upPass", "");
   g_cfg.eapIdent = getStr("eapIdent", "");
   g_cfg.eapUser  = getStr("eapUser", "");
   g_cfg.eapPass  = getStr("eapPass", "");
+  g_cfg.eapCa    = getStr("eapCa", "");
   g_cfg.portalType = getU8("portalType", PORTAL_NONE);
   g_cfg.portalUser = getStr("portalUser", "");
   g_cfg.portalPass = getStr("portalPass", "");
+  g_cfg.allowPapFallback = getBool("papFallback", false);
   g_cfg.portalUrl  = getStr("portalUrl", "");
   g_cfg.portalBody = getStr("portalBody", g_cfg.portalBody);
   prefs.end();
@@ -39,15 +45,18 @@ void settings::save() {
   prefs.begin(NS, false);
   prefs.putString("apSsid", g_cfg.apSsid);
   prefs.putString("apPass", g_cfg.apPass);
+  prefs.putString("adminPass", g_cfg.adminPass);
   prefs.putString("upSsid", g_cfg.upSsid);
   prefs.putUChar("upMode", g_cfg.upMode);
   prefs.putString("upPass", g_cfg.upPass);
   prefs.putString("eapIdent", g_cfg.eapIdent);
   prefs.putString("eapUser", g_cfg.eapUser);
   prefs.putString("eapPass", g_cfg.eapPass);
+  prefs.putString("eapCa", g_cfg.eapCa);
   prefs.putUChar("portalType", g_cfg.portalType);
   prefs.putString("portalUser", g_cfg.portalUser);
   prefs.putString("portalPass", g_cfg.portalPass);
+  prefs.putBool("papFallback", g_cfg.allowPapFallback);
   prefs.putString("portalUrl", g_cfg.portalUrl);
   prefs.putString("portalBody", g_cfg.portalBody);
   prefs.end();

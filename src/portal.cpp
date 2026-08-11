@@ -230,8 +230,14 @@ bool mikrotikLogin() {
     if (postLogin(body, resp)) {
       if (probeInternet()) return true;
     }
+    // Do not quietly retry in cleartext. The portal offered CHAP, so the
+    // password is not supposed to cross the wire at all; a gateway that simply
+    // always rejects CHAP would otherwise harvest it on the second attempt.
+    if (!g_cfg.allowPapFallback) {
+      s_err = "CHAP rejected (cleartext retry is off)";
+      return false;
+    }
     s_err = "CHAP rejected";
-    // Some custom login pages ship a CHAP challenge but still accept PAP.
   }
 
   String body = settings::expand("username={user}&password={pass}&dst=&popup=true",
