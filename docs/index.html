@@ -256,7 +256,7 @@ most have a process for registering devices.
 <h2>Honest limits</h2>
 
 <ul>
-  <li>Throughput lands around 3 to 10 Mbps. Fine for bulbs and speakers, not for your laptop.</li>
+  <li>Measured around 4 Mbps on a congested 2.4 GHz channel, where a laptop got 33 Mbps on the same network's 5 GHz band. The ESP32 has no 5 GHz radio, and one radio serves both networks at once, so every forwarded packet uses the same channel twice. Fine for bulbs and speakers, which is the point. Not fine for your laptop.</li>
   <li>One radio, shared. When the upstream roams you to another access point, everything behind Doorman drops for a few seconds. That's hardware, not a bug.</li>
   <li>2.4 GHz only. The ESP32 has no 5 GHz radio.</li>
   <li>Keep it on USB power. The internal battery is 200 mAh.</li>

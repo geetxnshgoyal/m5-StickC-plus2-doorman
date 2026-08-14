@@ -5,16 +5,16 @@
 // speak WPA2-PSK and have no browser (smart bulbs, speakers, printers) join
 // that instead.
 //
-// Everything behind the NAT shares one upstream MAC, so a single portal session
-// covers every device: sign in once, from anything with a browser, and the rest
-// of the network comes along.
+// Everything behind the NAT shares one upstream MAC, so signing in to the
+// portal once, by hand, from anything with a browser covers every device
+// behind it. Doorman never signs in for you.
 
 #include <M5Unified.h>
 #include <WiFi.h>
 
 #include "settings.h"
 #include "net.h"
-#include "portal.h"
+#include "online.h"
 #include "webui.h"
 #include "version.h"
 
@@ -42,6 +42,10 @@ void beginConnect() {
     }
     Serial.printf("[scan] %s: %s, ch%u, %d dBm\n", g_cfg.upSsid.c_str(),
                   s_scan.authName.c_str(), s_scan.channel, (int)s_scan.rssi);
+    // Do this before associating. One radio serves both interfaces, so a softAP
+    // pinned to some other channel would confine the station to whatever access
+    // point happens to sit there, however weak.
+    net::followChannel(s_scan.channel);
   } else {
     Serial.printf("[scan] %s not visible on 2.4 GHz\n", g_cfg.upSsid.c_str());
   }
@@ -94,15 +98,10 @@ void draw() {
   drawLine(72, "nat ", net::routingActive() ? String("active") : String("off"),
            net::routingActive() ? TFT_GREEN : TFT_RED);
 
-  uint16_t pc = portal::online() ? TFT_GREEN
-                                 : (portal::state() == portal::FAILED ? TFT_RED : TFT_YELLOW);
-  drawLine(88, "net ", String(portal::stateName()), pc);
+  drawLine(88, "net ", String(online::status()),
+           online::ok() ? TFT_GREEN : TFT_YELLOW);
 
-  String note = portal::online() ? String("logins ") + portal::loginCount()
-                                 : portal::lastError();
-  drawLine(104, "    ", note, TFT_DARKGREY);
-
-  drawLine(120, "", String("A=relogin  B(hold)=reset"), TFT_DARKGREY);
+  drawLine(120, "", String("A=recheck  B(hold)=reset"), TFT_DARKGREY);
 }
 
 void handleButtons() {
@@ -113,8 +112,8 @@ void handleButtons() {
     Serial.println("[btn] reconnecting upstream");
     beginConnect();
   } else if (M5.BtnA.wasClicked()) {
-    portal::forceLogin();
-    Serial.println("[btn] forced re-login");
+    online::recheck();
+    Serial.println("[btn] rechecking connectivity");
   }
   if (M5.BtnB.pressedFor(3000)) {
     M5.Display.fillScreen(TFT_RED);
@@ -162,7 +161,7 @@ void setup() {
   settings::load();
   net::startAp();
   webui::begin();
-  portal::begin();
+  online::begin();
 
   Serial.printf("[ap] %s  ->  http://%s\n", g_cfg.apSsid.c_str(), net::apIp().c_str());
 
@@ -211,7 +210,16 @@ void loop() {
         s_retryAt = millis() + 5000;
         break;
       }
-      portal::tick();
+      online::tick();
+#ifdef DOORMAN_SPEEDTEST
+      {
+        static bool benched = false;
+        if (!benched && online::ok()) {
+          benched = true;
+          online::benchmark();
+        }
+      }
+#endif
       break;
   }
 

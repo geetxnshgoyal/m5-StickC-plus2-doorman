@@ -59,6 +59,17 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) if you plan to change something.
 
 ---
 
+## Upgrading an already configured device
+
+**The browser installer erases everything**, including your saved Wi-Fi details.
+After it finishes, the device comes back as `Doorman` with the default password,
+not under whatever name you gave it, and you'll need to enter your network
+details again.
+
+To keep your settings, build and flash from source instead. `pio run -t upload`
+writes only the application, and settings live in a separate NVS partition it
+doesn't touch.
+
 ## After flashing
 
 1. The screen shows `DOORMAN` and `NOT CONFIGURED`.
@@ -93,9 +104,16 @@ Give it about ten seconds after boot. If the `Doorman` network still isn't
 listed, reflash and watch the boot log for the detected board id.
 
 **It connects but there's no internet.**
-That's normal until you log into the captive portal. Join `Doorman`, open any
-`http://` page, and the portal should appear. The screen says
-`session expired` when this is what's happening.
+That's normal until you log into the captive portal. Join `Doorman` and open a
+plain `http://` page. The screen says `sign in: open any http:// page` when this
+is what's happening.
+
+**The portal won't appear at all.**
+Type a plain `http://` address rather than searching for one, since HTTPS can't
+be intercepted. `http://neverssl.com` is the usual choice. If that still does
+nothing, forget the `Doorman` network on your phone and rejoin it: once a device
+has decided a network has no internet it stops probing, and rejoining forces a
+fresh captive check.
 
 **It worked and then stopped after a day.**
 Portal sessions expire, often every 24 hours. Log in again the same way. Doorman

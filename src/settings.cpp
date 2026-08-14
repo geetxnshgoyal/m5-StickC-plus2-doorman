@@ -14,30 +14,21 @@ static String getStr(const char *key, const String &fallback) {
 static uint8_t getU8(const char *key, uint8_t fallback) {
   return prefs.isKey(key) ? prefs.getUChar(key, fallback) : fallback;
 }
-static bool getBool(const char *key, bool fallback) {
-  return prefs.isKey(key) ? prefs.getBool(key, fallback) : fallback;
-}
 
 void settings::load() {
   // Read-write rather than read-only so a first boot creates the namespace
   // instead of failing nvs_open outright.
   prefs.begin(NS, false);
-  g_cfg.apSsid   = getStr("apSsid", g_cfg.apSsid);
-  g_cfg.apPass   = getStr("apPass", g_cfg.apPass);
+  g_cfg.apSsid    = getStr("apSsid", g_cfg.apSsid);
+  g_cfg.apPass    = getStr("apPass", g_cfg.apPass);
   g_cfg.adminPass = getStr("adminPass", "");
-  g_cfg.upSsid   = getStr("upSsid", "");
-  g_cfg.upMode   = getU8("upMode", UP_PSK);
-  g_cfg.upPass   = getStr("upPass", "");
-  g_cfg.eapIdent = getStr("eapIdent", "");
-  g_cfg.eapUser  = getStr("eapUser", "");
-  g_cfg.eapPass  = getStr("eapPass", "");
-  g_cfg.eapCa    = getStr("eapCa", "");
-  g_cfg.portalType = getU8("portalType", PORTAL_NONE);
-  g_cfg.portalUser = getStr("portalUser", "");
-  g_cfg.portalPass = getStr("portalPass", "");
-  g_cfg.allowPapFallback = getBool("papFallback", false);
-  g_cfg.portalUrl  = getStr("portalUrl", "");
-  g_cfg.portalBody = getStr("portalBody", g_cfg.portalBody);
+  g_cfg.upSsid    = getStr("upSsid", "");
+  g_cfg.upMode    = getU8("upMode", UP_PSK);
+  g_cfg.upPass    = getStr("upPass", "");
+  g_cfg.eapIdent  = getStr("eapIdent", "");
+  g_cfg.eapUser   = getStr("eapUser", "");
+  g_cfg.eapPass   = getStr("eapPass", "");
+  g_cfg.eapCa     = getStr("eapCa", "");
   prefs.end();
 }
 
@@ -53,12 +44,6 @@ void settings::save() {
   prefs.putString("eapUser", g_cfg.eapUser);
   prefs.putString("eapPass", g_cfg.eapPass);
   prefs.putString("eapCa", g_cfg.eapCa);
-  prefs.putUChar("portalType", g_cfg.portalType);
-  prefs.putString("portalUser", g_cfg.portalUser);
-  prefs.putString("portalPass", g_cfg.portalPass);
-  prefs.putBool("papFallback", g_cfg.allowPapFallback);
-  prefs.putString("portalUrl", g_cfg.portalUrl);
-  prefs.putString("portalBody", g_cfg.portalBody);
   prefs.end();
 }
 
@@ -66,29 +51,4 @@ void settings::factoryReset() {
   prefs.begin(NS, false);
   prefs.clear();
   prefs.end();
-}
-
-static String urlEncode(const String &s) {
-  static const char *hex = "0123456789ABCDEF";
-  String out;
-  out.reserve(s.length() * 3);
-  for (size_t i = 0; i < s.length(); i++) {
-    char c = s[i];
-    if (isalnum((unsigned char)c) || c == '-' || c == '_' || c == '.' || c == '~') {
-      out += c;
-    } else {
-      out += '%';
-      out += hex[(c >> 4) & 0xF];
-      out += hex[c & 0xF];
-    }
-  }
-  return out;
-}
-
-String settings::expand(const String &tmpl, const String &user, const String &pass) {
-  String out = tmpl;
-  out.replace("{user}", urlEncode(user));
-  out.replace("{pass}", urlEncode(pass));
-  out.replace("{ts}", String((uint32_t)millis()));
-  return out;
 }

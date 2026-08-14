@@ -3,18 +3,12 @@
 
 // Upstream authentication styles. Which one a network uses is not always
 // obvious from the outside, so net::scanUpstream() reports what the AP actually
-// advertises, so you don't have to guess.
+// advertises rather than making you guess.
 enum UpstreamMode : uint8_t {
-  UP_OPEN = 0,  // no Wi-Fi password (the portal does all the gating)
+  UP_OPEN = 0,  // no Wi-Fi password (a portal does all the gating)
   UP_PSK  = 1,  // one shared Wi-Fi password (WPA2-Personal)
   UP_PEAP = 2,  // WPA2-Enterprise, PEAP-MSCHAPv2
   UP_TTLS = 3,  // WPA2-Enterprise, EAP-TTLS-MSCHAPv2
-};
-
-enum PortalType : uint8_t {
-  PORTAL_NONE = 0,
-  PORTAL_MIKROTIK = 1,  // RouterOS hotspot; handles both PAP and MD5-CHAP forms
-  PORTAL_GENERIC = 2,   // paste your own POST target and body template
 };
 
 struct Settings {
@@ -28,7 +22,7 @@ struct Settings {
   // bulb should not be able to read your passwords off the config page.
   String adminPass;
 
-  // The hostel network.
+  // The network to join.
   String upSsid;
   uint8_t upMode = UP_PSK;
   String upPass;     // UP_PSK only
@@ -40,22 +34,11 @@ struct Settings {
   // standard evil-twin harvest. Blank is allowed but warned about loudly.
   String eapCa;
 
-  // The second login. Defaults to monitor-only on purpose: many portals put a
-  // terms-acceptance checkbox next to the credentials, and agreeing to terms is
-  // a human's job, not a firmware's. See the README.
-  uint8_t portalType = PORTAL_NONE;
-  String portalUser;
-  String portalPass;
-
-  // When a portal offers CHAP, failure must not silently retry in cleartext:
-  // a gateway that always rejects CHAP would harvest the password. Opt in only
-  // if you know your portal advertises CHAP but genuinely accepts PAP.
-  bool allowPapFallback = false;
-
-  // PORTAL_GENERIC only. Blank host in portalUrl means "the default gateway".
-  // {user}, {pass} and {ts} are substituted into the body.
-  String portalUrl;
-  String portalBody = "username={user}&password={pass}";
+  // There is deliberately nothing here about captive portals. Doorman does not
+  // log in to them. You sign in once yourself from any device behind it, and
+  // because everything leaves through one MAC that covers the whole private
+  // network. Automating it meant a pile of per-vendor guesswork, a credential
+  // downgrade risk, and a device ticking terms-of-service boxes on your behalf.
 
   bool configured() const { return upSsid.length() > 0; }
 };
@@ -66,6 +49,4 @@ namespace settings {
 void load();
 void save();
 void factoryReset();
-// Replaces {user}/{pass}/{ts} in a body template, URL-encoding the values.
-String expand(const String &tmpl, const String &user, const String &pass);
 }  // namespace settings

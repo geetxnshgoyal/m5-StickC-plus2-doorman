@@ -8,12 +8,38 @@
 
 static bool s_routing = false;
 
+// The access point scanUpstream() chose. Association is pinned to it, because
+// otherwise the supplicant re-picks on every retry and drifts back to whichever
+// radio it feels like, which on a site with one SSID on many access points
+// means the distant one.
+static net::ScanResult s_pick;
+
+// True when the scan actually identified a specific radio to aim at.
+static bool havePick() {
+  if (!s_pick.found) return false;
+  for (int i = 0; i < 6; i++)
+    if (s_pick.bssid[i]) return true;
+  return false;
+}
+
 void net::startAp() {
   WiFi.mode(WIFI_AP_STA);
-  // max_connection 8: a bulb + an Echo leaves room to spare.
+  // max_connection 8: a bulb and an Echo leave room to spare.
   WiFi.softAP(g_cfg.apSsid.c_str(), g_cfg.apPass.c_str(), 1, 0, 8);
   WiFi.setSleep(false);
   esp_wifi_set_ps(WIFI_PS_NONE);
+
+  // Deliberately not calling setTxPower. The chip already defaults to its
+  // maximum, and an earlier attempt to "raise" it actually set 19.5 dBm, half
+  // a dB below the default.
+}
+
+void net::followChannel(uint8_t channel) {
+  if (channel < 1 || channel > 14) return;
+  if (WiFi.channel() == channel) return;
+  Serial.printf("[ap] moving to channel %u so the station can use the best "
+                "access point\n", channel);
+  WiFi.softAP(g_cfg.apSsid.c_str(), g_cfg.apPass.c_str(), channel, 0, 8);
 }
 
 static const char *authName(wifi_auth_mode_t m, bool &enterprise) {
@@ -47,8 +73,10 @@ net::ScanResult net::scanUpstream(const String &ssid) {
     r.channel = WiFi.channel(i);
     r.authName = name;
     r.isEnterprise = ent;
+    if (WiFi.BSSID(i)) memcpy(r.bssid, WiFi.BSSID(i), 6);
   }
   WiFi.scanDelete();
+  s_pick = r;  // connectUpstream() pins the association to this
   return r;
 }
 
@@ -79,11 +107,20 @@ void net::connectUpstream() {
       esp_eap_client_set_disable_time_check(true);
     }
     esp_wifi_sta_enterprise_enable();
-    WiFi.begin(g_cfg.upSsid.c_str());
-  } else if (g_cfg.upMode == UP_PSK) {
-    WiFi.begin(g_cfg.upSsid.c_str(), g_cfg.upPass.c_str());
+  }
+
+  // Pin to the exact access point and channel we scanned. Without the BSSID the
+  // supplicant picks for itself, and a failed attempt followed by a retry is
+  // enough for it to settle on a far weaker radio on another channel, dragging
+  // the softAP along with it.
+  const char *pass = (g_cfg.upMode == UP_PSK) ? g_cfg.upPass.c_str() : nullptr;
+  if (havePick()) {
+    Serial.printf("[up] pinning to %02X:%02X:%02X:%02X:%02X:%02X on ch%u (%d dBm)\n",
+                  s_pick.bssid[0], s_pick.bssid[1], s_pick.bssid[2], s_pick.bssid[3],
+                  s_pick.bssid[4], s_pick.bssid[5], s_pick.channel, (int)s_pick.rssi);
+    WiFi.begin(g_cfg.upSsid.c_str(), pass, s_pick.channel, s_pick.bssid);
   } else {
-    WiFi.begin(g_cfg.upSsid.c_str());
+    WiFi.begin(g_cfg.upSsid.c_str(), pass);
   }
   WiFi.setSleep(false);
 }
@@ -100,7 +137,12 @@ bool net::enableRouting() {
   if (!sta || !ap) return false;
 
   // The softAP's DHCP server offers no DNS by default, so clients would get an
-  // address and then fail every lookup. Hand them whatever the hostel handed us.
+  // address and then fail every lookup.
+  //
+  // Hand them whatever resolver the upstream network handed us. An earlier
+  // version substituted the gateway here, on the theory that a captive network
+  // wants to intercept lookups. That was speculation, it was never measured,
+  // and the portal worked perfectly well without it.
   esp_netif_dns_info_t dns;
   if (esp_netif_get_dns_info(sta, ESP_NETIF_DNS_MAIN, &dns) == ESP_OK) {
     esp_netif_dhcps_stop(ap);

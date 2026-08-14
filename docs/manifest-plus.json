@@ -1,13 +1,13 @@
 {
   "name": "Doorman (M5StickC Plus)",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "new_install_prompt_erase": true,
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "https://github.com/geetxnshgoyal/m5-StickC-plus2-doorman/releases/latest/download/doorman-stickc-plus.factory.bin",
+          "path": "firmware/doorman-stickc-plus.factory.bin",
           "offset": 0
         }
       ]

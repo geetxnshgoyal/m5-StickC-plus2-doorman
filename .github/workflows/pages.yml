@@ -1,0 +1,76 @@
+# Publishes the project page together with the firmware it installs.
+#
+# The binaries have to be served from the same origin as the page. GitHub
+# release assets send no access-control-allow-origin header, so a browser
+# fetch() of one from the Pages origin is blocked outright and the web
+# installer can never download anything. Building the firmware into the site
+# itself sidesteps that entirely, and keeps 1.4 MB binaries out of git.
+
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a half-finished deployment, but only run one at a time.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build every board target
+        run: pio run
+
+      - name: Assemble the site
+        run: |
+          mkdir -p site/firmware
+          cp -r docs/. site/
+          cp .pio/build/stickc-plus2/firmware.factory.bin site/firmware/doorman-stickc-plus2.factory.bin
+          cp .pio/build/stickc-plus/firmware.factory.bin  site/firmware/doorman-stickc-plus.factory.bin
+          ls -lR site
+
+      # enablement: true also flips the Pages source to "workflow" on the first
+      # run, so this replaces the branch-based setup without a manual step.
+      - uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

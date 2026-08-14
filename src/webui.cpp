@@ -1,7 +1,7 @@
 #include "webui.h"
 #include "settings.h"
 #include "net.h"
-#include "portal.h"
+#include "online.h"
 #include "version.h"
 
 #include <WiFi.h>
@@ -38,8 +38,14 @@ bool allowed() {
   }
   const String &pass = g_cfg.adminPass.length() ? g_cfg.adminPass : g_cfg.apPass;
   if (!server.authenticate("admin", pass.c_str())) {
-    server.requestAuthentication(DIGEST_AUTH, "Doorman",
-                                 "Sign in with user 'admin'.");
+    // Basic, not digest. WebServer regenerates its nonce and opaque on every
+    // requestAuthentication() call but requires them to match on the way back,
+    // so any extra request from the browser invalidates the credentials it was
+    // about to send and the login loops forever. Basic is also honest here:
+    // this page is only reachable over the device's own WPA2 network, so the
+    // link is already encrypted below us.
+    server.requestAuthentication(BASIC_AUTH, "Doorman",
+                                 "Sign in as 'admin' with this network's password.");
     return false;
   }
   return true;
@@ -108,10 +114,7 @@ String statusBlock() {
   s += "ip       : " + net::staIp() + "\n";
   s += "gateway  : " + WiFi.gatewayIP().toString() + "\n";
   s += "nat      : " + String(net::routingActive() ? "active" : "off") + "\n";
-  s += "portal   : " + String(portal::stateName());
-  if (portal::lastError().length()) s += "  (" + portal::lastError() + ")";
-  s += "\n";
-  s += "logins   : " + String(portal::loginCount()) + "\n";
+  s += "internet : " + String(online::status()) + "\n";
   s += "clients  : " + String(net::clientCount()) + "\n";
   s += "uptime   : " + String(millis() / 60000) + " min\n";
   s += "free heap: " + String(ESP.getFreeHeap() / 1024) + " KB";
@@ -142,13 +145,13 @@ void handleRoot() {
   h += STYLE;
   h += "<h1>" DOORMAN_NAME " <small>" DOORMAN_VERSION "</small></h1>";
   h += "<div class=s>" + esc(statusBlock()) + "</div>";
-  // force re-login changes state, so it's a POST carrying the token, not a link
-  // some other page can trigger on your behalf.
+  // Rechecking changes state, so it's a POST carrying the token rather than a
+  // link some other page could trigger on your behalf.
   h += "<p><a href='/scan'>scan nearby networks</a> &middot; "
-       "<form method=POST action=/relogin style='display:inline'>"
+       "<form method=POST action=/recheck style='display:inline'>"
        "<input type=hidden name=csrf value='" + s_csrf + "'>"
        "<button type=submit style='margin:0;padding:2px 10px;font-size:13px'>"
-       "force re-login</button></form></p>";
+       "check connection</button></form></p>";
 
   h += "<form method=POST action=/save>";
   h += "<input type=hidden name=csrf value='" + s_csrf + "'>";
@@ -186,25 +189,6 @@ void handleRoot() {
        "<textarea name=eapCa rows=3 maxlength=2000 placeholder='"
        "-----BEGIN CERTIFICATE-----'>" + esc(g_cfg.eapCa) + "</textarea>";
 
-  h += "<h2>Captive portal <small>(the second login)</small></h2>";
-  h += "<label>Type</label><select name=portalType>";
-  h += opt("None - monitor only, you log in by hand", PORTAL_NONE, g_cfg.portalType);
-  h += opt("MikroTik hotspot (RouterOS built-in form)", PORTAL_MIKROTIK, g_cfg.portalType);
-  h += opt("Generic form POST", PORTAL_GENERIC, g_cfg.portalType);
-  h += "</select>";
-  h += "<label>Portal username</label>"
-       "<input name=portalUser maxlength=64 value='" + esc(g_cfg.portalUser) + "'>";
-  h += "<label>Portal password</label>" +
-       pwField("portalPass", g_cfg.portalPass, 64);
-  h += "<label><input type=checkbox name=papFallback value=1 style='width:auto'";
-  h += g_cfg.allowPapFallback ? " checked" : "";
-  h += "> Retry in cleartext if CHAP is rejected <small>(off by default: a "
-       "gateway that always rejects CHAP would capture your password)</small>"
-       "</label>";
-  h += "<label>POST URL <small>(generic only; leading / = the gateway)</small></label>"
-       "<input name=portalUrl maxlength=200 value='" + esc(g_cfg.portalUrl) + "'>";
-  h += "<label>POST body <small>(generic only; {user} {pass} {ts})</small></label>"
-       "<input name=portalBody maxlength=300 value='" + esc(g_cfg.portalBody) + "'>";
 
   h += "<button type=submit>Save &amp; reboot</button></form>";
   server.send(200, "text/html", h);
@@ -259,10 +243,10 @@ bool csrfOk() {
   return false;
 }
 
-void handleRelogin() {
+void handleRecheck() {
   if (!allowed()) return;
   if (!csrfOk()) return;
-  portal::forceLogin();
+  online::recheck();
   server.sendHeader("Location", "/");
   server.send(302, "text/plain", "");
 }
@@ -304,15 +288,6 @@ void handleSave() {
   g_cfg.eapUser = arg("eapUser", g_cfg.eapUser);
   g_cfg.eapPass = argPw("eapPass", g_cfg.eapPass);
   g_cfg.eapCa = arg("eapCa", g_cfg.eapCa);
-  g_cfg.portalType =
-      clampU8(arg("portalType", String(g_cfg.portalType)).toInt(), PORTAL_GENERIC,
-              g_cfg.portalType);
-  g_cfg.portalUser = arg("portalUser", g_cfg.portalUser);
-  g_cfg.portalPass = argPw("portalPass", g_cfg.portalPass);
-  // An unchecked checkbox submits nothing at all, so absence means false.
-  g_cfg.allowPapFallback = server.hasArg("papFallback");
-  g_cfg.portalUrl = arg("portalUrl", g_cfg.portalUrl);
-  g_cfg.portalBody = arg("portalBody", g_cfg.portalBody);
   settings::save();
 
   server.send(200, "text/html",
@@ -329,7 +304,7 @@ void webui::begin() {
   server.on("/", handleRoot);
   server.on("/save", HTTP_POST, handleSave);
   server.on("/scan", handleScan);
-  server.on("/relogin", HTTP_POST, handleRelogin);
+  server.on("/recheck", HTTP_POST, handleRecheck);
   server.onNotFound(handleRoot);
   server.begin();
 }

@@ -180,15 +180,19 @@ Then:
 ```
 DOORMAN     17 min
 ap   Doorman  4 cli
-up   CampusWiFi -72dBm
+up   CampusWiFi -54dBm
 ip   10.0.4.62
 nat  active
 net  online
-     logins 0
 ```
 
 - **A** forces an immediate connectivity re-check.
+- **A**, held for 2s, rescans and reconnects the uplink.
 - **B**, held for 3s, factory resets.
+
+The `net` line reads `sign in: open any http:// page` when traffic isn't
+getting out, so you can tell a lapsed portal session apart from a dropped
+uplink at a glance.
 
 When a portal session lapses the screen says so in plain language instead of
 failing quietly.
@@ -202,34 +206,57 @@ Lots of portals put a terms checkbox next to the login fields, and automating it
 would be easy. But a box your device quietly ticks for you every day isn't
 really consent, and the person bound by those terms is you, not your firmware.
 
-So the default is monitor only. Doorman watches the connection, and when the
-session expires it tells you, and you sign in. One login from any device covers
-everything behind it. That costs you a few seconds a day and keeps you the one
-who agreed to things.
+So Doorman only watches the connection. When the session expires it says so, and
+you sign in. One login from any device covers everything behind it. That costs
+you a few seconds a day and keeps you the one who agreed to things.
 
-There are automated adapters for portals that don't ask you to agree to
-anything, and you can write your own. Just don't hand consent to the machine.
+That principle is why the automated login adapters were removed rather than
+merely defaulted to off. See below.
 
-## Portal adapters
+## Signing in to a portal
 
-| Adapter | What it does |
-| --- | --- |
-| **None** (default) | Watches reachability and reports when the session drops. You log in. |
-| **MikroTik** | RouterOS's built-in hotspot form, both plain PAP and the default `login-by=http-chap`, where the wire only carries `MD5(chap-id, password, challenge)`. |
-| **Generic** | Paste a POST URL and a body template using `{user}`, `{pass}`, `{ts}`, copied out of your browser's DevTools network tab. |
+You do it, once, from any device behind Doorman. There is no portal
+configuration and nothing to set up.
 
-Every adapter confirms success with a real reachability probe rather than
-trusting an HTTP 200. Portals that return 200 while still intercepting you are
-the normal case, not the exception.
+Join Doorman's network from a phone or laptop and open any `http://` page. The
+portal appears and you log in as normal. Because every device behind Doorman
+leaves through one MAC address, that single login covers all of them until the
+session expires, typically 24 hours.
 
-Generic currently speaks plain HTTP only. Portals hosted off-gateway are usually
-HTTPS and would need `WiFiClientSecure`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+The screen says `sign in: open any http:// page` whenever traffic isn't getting
+out, so you can tell that case apart from a dropped uplink.
+
+**If the portal doesn't appear**, two things usually explain it:
+
+- **Browsers default to HTTPS**, and an HTTPS request cannot be intercepted, so
+  it hangs instead of redirecting. Type a plain `http://` address.
+  `http://neverssl.com` exists for exactly this.
+- **Your phone has already given up on the network.** Once a device decides a
+  network has no internet, it stops probing and won't offer the sign-in sheet
+  again. Forget the network and rejoin it, which forces a fresh captive check
+  and brings the portal straight up.
+
+Doorman used to have adapters that logged in automatically for MikroTik and
+generic form portals. They were removed. They needed per-vendor guesswork, they
+risked downgrading a CHAP login to a cleartext one when they failed, and making
+them work meant a device ticking terms-of-service checkboxes on your behalf.
+One manual login a day is a better trade than any of that.
 
 ## Honest limits
 
-- Throughput lands somewhere around 3 to 10 Mbps. That's fine for bulbs,
-  speakers and most IoT traffic. Don't put your laptop behind it for anything
-  heavy.
+- **Measured around 4 Mbps** on a congested 2.4 GHz channel in a hostel, on a
+  network where a laptop got 33 Mbps over 5 GHz. Two reasons for the gap, and
+  neither is fixable in software: the ESP32 has no 5 GHz radio at all, and it
+  has one radio serving both the network it joins and the network it
+  broadcasts, so every forwarded packet occupies the same channel twice.
+  Expect a few Mbps, depending on how busy 2.4 GHz is around you and how good
+  your signal to the upstream access point is.
+- **Signal to the upstream matters enormously.** The same device measured
+  0.6 Mbps associated at -66 dBm and 4 Mbps at -48 dBm. If throughput is poor,
+  check what the screen reports before assuming the hardware is at fault.
+- That is fine for what this is for. A smart bulb exchanges a few hundred
+  bytes at a time and an Echo streams music at around 0.3 Mbps. It is not fine
+  as your laptop's connection and it never will be.
 - One radio, shared. The ESP32 can't run its AP and station on different
   channels. When the upstream roams you to another access point, Doorman's
   network gets dragged onto the new channel and every client drops for a few
@@ -284,7 +311,7 @@ that's an assumption worth seeing rather than trusting.
 | --- | --- |
 | `src/main.cpp` | boot, phase machine, display, buttons |
 | `src/net.cpp` | softAP, station connect (PSK and EAP), NAPT, DHCP DNS |
-| `src/portal.cpp` | reachability probe, portal adapters, backoff |
+| `src/online.cpp` | reachability probe and status, no login logic |
 | `src/webui.cpp` | config page on `http://192.168.4.1` |
 | `src/settings.cpp` | NVS-backed config |
 
@@ -314,6 +341,23 @@ Worth knowing about, because sometimes one of these is the better answer:
 - **Asking whoever runs the network.** On any managed or corporate network this
   is the right answer, not this repo. Most have a process for registering
   devices.
+
+## What's next
+
+Doorman runs on the M5StickC Plus2 today. Support for more boards is the next
+piece of work: bare ESP32 devkits, and the C3, S3 and C6. The networking is
+already board agnostic, so most of the job is putting the screen, buttons and
+power latch behind a small interface. See
+[CONTRIBUTING.md](CONTRIBUTING.md) if you'd like to help.
+
+The ESP8266 comes up often, so worth answering here: NAT is possible on it, but
+it has no WPA2-Enterprise support at all in its SDK, so that half of the
+project could never work. It would be a captive-portal-only build with much
+less headroom.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
